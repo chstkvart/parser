@@ -1,0 +1,16 @@
+# Virtual environment and Python caches
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+
+# Local settings: PROXY_URL may contain a login and password
+.env
+.env.*
+
+# Logs and editor files
+*.log
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
