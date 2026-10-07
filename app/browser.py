@@ -50,7 +50,8 @@ class BrowserManager:
                 self._pw = await async_playwright().start()
             kwargs = dict(
                 headless=config.HEADLESS,
-                args=["--disable-blink-features=AutomationControlled"],
+                # Docker gives /dev/shm only 64 MB, which makes Chrome tabs crash without the second flag.
+                args=["--disable-blink-features=AutomationControlled", "--disable-dev-shm-usage"],
                 proxy=_proxy_settings(),
             )
             try:

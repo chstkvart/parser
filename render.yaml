@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: parser
+    runtime: docker
+    plan: free
+    region: frankfurt
+    healthCheckPath: /
+    envVars:
+      - key: MAX_BROWSER_PAGES
+        value: "2"
