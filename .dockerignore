@@ -1,0 +1,11 @@
+.git
+.venv
+venv
+__pycache__
+*.py[cod]
+.env
+.env.*
+*.log
+.vscode
+.idea
+deploy

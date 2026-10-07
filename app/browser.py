@@ -39,6 +39,8 @@ class BrowserManager:
         self._pw: Playwright | None = None
         self._browser: Browser | None = None
         self._lock = asyncio.Lock()
+        # Each page is a full browser tab; caps memory/CPU when many visitors search at once.
+        self._pages = asyncio.Semaphore(config.MAX_BROWSER_PAGES)
 
     async def _ensure_browser(self) -> Browser:
         async with self._lock:
@@ -60,19 +62,20 @@ class BrowserManager:
 
     @asynccontextmanager
     async def page(self):
-        browser = await self._ensure_browser()
-        context: BrowserContext = await browser.new_context(
-            locale="ru-RU",
-            timezone_id="Europe/Moscow",
-            user_agent=config.USER_AGENT,
-            viewport={"width": 1440, "height": 900},
-        )
-        await context.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
-        page: Page = await context.new_page()
-        try:
-            yield page
-        finally:
-            await context.close()
+        async with self._pages:
+            browser = await self._ensure_browser()
+            context: BrowserContext = await browser.new_context(
+                locale="ru-RU",
+                timezone_id="Europe/Moscow",
+                user_agent=config.USER_AGENT,
+                viewport={"width": 1440, "height": 900},
+            )
+            await context.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+            page: Page = await context.new_page()
+            try:
+                yield page
+            finally:
+                await context.close()
 
     async def close(self) -> None:
         if self._browser:

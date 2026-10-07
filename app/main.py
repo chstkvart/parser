@@ -1,5 +1,7 @@
 import asyncio
 import logging
+import time
+from collections import defaultdict, deque
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -40,6 +42,29 @@ async def marketplaces():
     return [{"id": key, "name": module.NAME} for key, module in PARSERS.items()]
 
 
+_LOOPBACK = {"127.0.0.1", "::1"}
+_hits: dict[str, deque[float]] = defaultdict(deque)
+
+
+def _client_ip(request: Request) -> str:
+    peer = request.client.host if request.client else "unknown"
+    # X-Forwarded-For can be forged by clients, so honor it only when a trusted proxy sits in front of the app.
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded and (config.TRUST_PROXY or peer in _LOOPBACK):
+        return forwarded.split(",")[0].strip()
+    return peer
+
+
+def _check_rate_limit(request: Request) -> None:
+    now = time.monotonic()
+    hits = _hits[_client_ip(request)]
+    while hits and now - hits[0] > 60:
+        hits.popleft()
+    if len(hits) >= config.RATE_LIMIT_PER_MINUTE:
+        raise HTTPException(429, "Слишком много поисков подряд. Подождите минуту и попробуйте снова.")
+    hits.append(now)
+
+
 async def _run_unless_disconnected(request: Request, coro):
     """Cancels the parser when the user starts a new search, so abandoned searches don't hog the browser."""
     task = asyncio.ensure_future(coro)
@@ -56,6 +81,7 @@ async def search(request: Request, marketplace: str, q: str = Query(..., min_len
     module = PARSERS.get(marketplace)
     if not module:
         raise HTTPException(404, "Неизвестный маркетплейс")
+    _check_rate_limit(request)
     query = q.strip()
     result = MarketplaceResult(
         marketplace=marketplace,

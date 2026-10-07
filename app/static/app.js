@@ -95,7 +95,12 @@ async function search(query) {
     let r;
     try {
       const resp = await fetch(`/api/search/${m.id}?q=${encodeURIComponent(query)}`, { signal: abort.signal });
-      r = resp.ok ? await resp.json() : { error: `Ошибка сервера (${resp.status})`, search_url: "#" };
+      if (resp.ok) {
+        r = await resp.json();
+      } else {
+        const detail = await resp.json().then((d) => d.detail).catch(() => null);
+        r = { error: typeof detail === "string" ? detail : `Ошибка сервера (${resp.status})`, search_url: "#" };
+      }
     } catch (e) {
       if (abort.signal.aborted) return;
       r = { error: "Сервер недоступен", search_url: "#" };
