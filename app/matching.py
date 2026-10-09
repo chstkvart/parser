@@ -21,7 +21,25 @@ SYNONYMS = {
     "сони": "sony",
     "плейстейшн": "playstation",
     "пс5": "ps5",
+    "про": "pro",
+    "макс": "max",
+    "плюс": "plus",
+    "мини": "mini",
+    "ультра": "ultra",
+    "лайт": "lite",
 }
+
+# A model number plus one of these is a different product: "iphone 16" must not return "iPhone 16 Pro Max".
+VARIANT_WORDS = {"pro", "max", "plus", "mini", "ultra", "lite"}
+
+# Matched against the title only: descriptions often say "не восстановленный".
+REFURBISHED_STEMS = ("восстановл", "refurb", "renewed", "уценен", "уценк", "витрин", "used")
+REFURBISHED_WORDS = {"бу"}
+
+IMITATION_STEMS = ("копия", "копии", "реплик", "replica", "подделк")
+# Cheap Android phones are sold as "Андроид айфон 15 Pro Max".
+APPLE_TOKENS = {"iphone", "apple"}
+ANDROID_WORDS = {"android", "андроид"}
 
 # Dropped unless the query itself asks for an accessory, so "iphone 16" doesn't return a case for iPhone 16.
 ACCESSORY_STEMS = (
@@ -58,7 +76,7 @@ def keyword_coverage(q_tokens: list[str], offer: Offer) -> float:
     """Share of query keywords found in the offer's title or description."""
     if not q_tokens:
         return 0.0
-    words = set(tokenize(offer.title)) | set(tokenize(offer.description))
+    words = {SYNONYMS.get(w, w) for w in tokenize(offer.title) + tokenize(offer.description)}
     return sum(_token_matches(t, words) for t in q_tokens) / len(q_tokens)
 
 
@@ -67,6 +85,45 @@ def _is_unwanted_accessory(q_tokens: list[str], offer: Offer) -> bool:
         return False
     head = tokenize(offer.title)[:ACCESSORY_TITLE_WORDS]
     return any(w.startswith(s) for w in head for s in ACCESSORY_STEMS)
+
+
+def _is_refurbished_word(word: str) -> bool:
+    return word in REFURBISHED_WORDS or word.startswith(REFURBISHED_STEMS)
+
+
+def _is_unwanted_refurbished(q_tokens: list[str], offer: Offer) -> bool:
+    if any(_is_refurbished_word(t) for t in q_tokens):
+        return False
+    title = offer.title.lower().replace("ё", "е")
+    return "б/у" in title or any(_is_refurbished_word(w) for w in tokenize(title))
+
+
+def _is_unwanted_imitation(q_tokens: list[str], offer: Offer) -> bool:
+    if any(t.startswith(IMITATION_STEMS) for t in q_tokens):
+        return False
+    words = tokenize(offer.title)
+    if any(w.startswith(IMITATION_STEMS) for w in words):
+        return True
+    return bool(APPLE_TOKENS & set(q_tokens)) and bool(ANDROID_WORDS & set(words))
+
+
+def _has_unwanted_variant(q_tokens: list[str], offer: Offer) -> bool:
+    if not any(any(ch.isdigit() for ch in t) for t in q_tokens):
+        return False
+    title_words = {SYNONYMS.get(w, w) for w in tokenize(offer.title)}
+    return bool((title_words & VARIANT_WORDS) - set(q_tokens))
+
+
+# Most important first; a rule that would leave nothing is skipped, so the user still gets an offer.
+UNWANTED_RULES = (_is_unwanted_accessory, _is_unwanted_imitation, _is_unwanted_refurbished, _has_unwanted_variant)
+
+
+def _drop_unwanted(q_tokens: list[str], offers: list[Offer]) -> list[Offer]:
+    for rule in UNWANTED_RULES:
+        kept = [o for o in offers if not rule(q_tokens, o)]
+        if kept:
+            offers = kept
+    return offers
 
 
 def _score(offer: Offer) -> float:
@@ -80,17 +137,13 @@ def _score(offer: Offer) -> float:
 def _select_candidates(q_tokens: list[str], offers: list[Offer]) -> list[Offer]:
     """Strictest non-empty tier wins, so any query the marketplace itself answered still yields an offer."""
     coverage = [(o, keyword_coverage(q_tokens, o)) for o in offers]
-    full = [o for o, c in coverage if c == 1.0]
-    tiers = [
-        [o for o in full if not _is_unwanted_accessory(q_tokens, o)],
-        full,
-    ]
+    tiers = [[o for o, c in coverage if c == 1.0]]
     best_partial = max((c for _, c in coverage), default=0.0)
     if best_partial >= MIN_PARTIAL_COVERAGE:
         tiers.append([o for o, c in coverage if c == best_partial])
     # Keywords may be transliterated or misspelled; the marketplace's own top hits are then the best guess.
     tiers.append(offers[:FALLBACK_TOP])
-    return next(t for t in tiers if t)
+    return _drop_unwanted(q_tokens, next(t for t in tiers if t))
 
 
 def pick_best(query: str, offers: list[Offer], top_n: int = 40) -> Offer | None:
