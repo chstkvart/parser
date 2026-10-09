@@ -48,8 +48,10 @@ button:disabled { opacity: .6; cursor: default; }
 }
 
 .results {
+  max-width: 720px;
+  margin: 0 auto;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 18px;
 }
 
@@ -84,9 +86,7 @@ button:disabled { opacity: .6; cursor: default; }
 .market { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-weight: 700; }
 .dot { width: 12px; height: 12px; border-radius: 50%; }
 .dot.wildberries { background: #a73afd; }
-.dot.ozon { background: #005bff; }
 .dot.yandex_market { background: #ffcc00; }
-.dot.megamarket { background: #e0287e; }
 
 .image {
   display: flex;
