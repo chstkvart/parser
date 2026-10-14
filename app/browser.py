@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 from playwright.async_api import Browser, BrowserContext, Page, Playwright, async_playwright
 
@@ -29,8 +29,8 @@ def _proxy_settings() -> dict | None:
     u = urlparse(config.PROXY_URL)
     proxy = {"server": f"{u.scheme}://{u.hostname}:{u.port}"}
     if u.username:
-        proxy["username"] = u.username
-        proxy["password"] = u.password or ""
+        proxy["username"] = unquote(u.username)
+        proxy["password"] = unquote(u.password or "")
     return proxy
 
 
@@ -104,5 +104,6 @@ async def raise_if_blocked(page: Page, site: str) -> None:
     except Exception:
         return
     if any(m.lower() in text.lower() for m in BLOCK_MARKERS) or "showcaptcha" in page.url:
-        hint = "" if config.PROXY_URL else " Скорее всего, нужен российский IP — укажите прокси в PROXY_URL."
-        raise BlockedError(f"{site} заблокировал запрос (антибот/капча).{hint}")
+        if not config.PROXY_URL:
+            log.warning("%s blocked the request; a Russian proxy in PROXY_URL usually helps", site)
+        raise BlockedError(f"{site} временно ограничил доступ. Попробуйте позже или откройте поиск на сайте.")

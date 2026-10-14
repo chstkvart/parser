@@ -1,5 +1,5 @@
 import html
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, urljoin, urlparse
 
 from app.browser import goto, manager, raise_if_blocked
 from app.matching import parse_int, parse_price
@@ -44,6 +44,19 @@ SNIPPETS_JS = r"""
 """
 
 
+# Links and images are scraped from a third-party page and rendered on ours, so only Yandex's own hosts pass.
+PRODUCT_HOSTS = ("market.yandex.ru",)
+IMAGE_HOSTS = ("yandex.net", "yandex.ru", "yastatic.net")
+
+
+def _safe_url(url: str, hosts: tuple[str, ...]) -> str | None:
+    u = urlparse(url)
+    host = (u.hostname or "").lower()
+    if u.scheme != "https" or not any(host == h or host.endswith("." + h) for h in hosts):
+        return None
+    return url
+
+
 def _reviews_count(text: str | None) -> int | None:
     # "4.9 (149) · 307 купили" -> 149
     if not text or "(" not in text:
@@ -67,10 +80,10 @@ async def search(query: str) -> list[Offer]:
         raw = await page.evaluate(SNIPPETS_JS)
         offers, seen = [], set()
         for r in raw:
-            if not r["href"] or r["href"] in seen:
+            href = _safe_url(urljoin(BASE + "/", r["href"] or ""), PRODUCT_HOSTS)
+            if not href or href in seen:
                 continue
-            seen.add(r["href"])
-            href = r["href"] if r["href"].startswith("http") else BASE + r["href"]
+            seen.add(href)
             rating = parse_price(r["rating"]) or None
             offers.append(
                 Offer(
@@ -79,7 +92,7 @@ async def search(query: str) -> list[Offer]:
                     url=href,
                     rating=rating,
                     reviews=_reviews_count(r["reviews"]),
-                    image=r["image"],
+                    image=_safe_url(r["image"] or "", IMAGE_HOSTS),
                     description=r["description"],
                 )
             )

@@ -8,3 +8,6 @@ services:
     envVars:
       - key: MAX_BROWSER_PAGES
         value: "2"
+      # Render keeps client-sent X-Forwarded-For; Cloudflare in front of it sets this header itself.
+      - key: CLIENT_IP_HEADER
+        value: true-client-ip
