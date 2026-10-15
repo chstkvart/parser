@@ -1,4 +1,4 @@
-[![Открыть сайт](https://img.shields.io/badge/%D0%9E%D1%82%D0%BA%D1%80%D1%8B%D1%82%D1%8C%20%D1%81%D0%B0%D0%B9%D1%82-parser--gyz9.onrender.com-46E3B7?style=for-the-badge&logo=render&logoColor=white)](https://parser-gyz9.onrender.com)
+
 
 # Где дешевле?
 
